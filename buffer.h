@@ -12,5 +12,8 @@ size_t buffer_cap(struct buffer *buff);
 size_t buffer_size(struct buffer *buff);
 size_t buffer_resize(struct buffer *buff, size_t size);
 char *buffer_ptr(struct buffer *buff);
+
+size_t buffer_pop(struct buffer *buff, size_t len);
+char *buffer_top(struct buffer *buff, size_t len);
 // buffer_free: free the buffer object and its data
 void buffer_free(struct buffer *buff);

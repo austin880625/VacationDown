@@ -5,9 +5,39 @@
 #define MD_LINE_TABULATION	0x000B
 #define MD_FORM_FEED		0x000C
 
+#include <stdlib.h>
 #include "buffer.h"
+
+enum node_type {
+	DOC,
+	CONT_BLOCKQUOTE,
+	CONT_LIST_ITEM,
+	CONT_LIST,
+	LEAF_THEMATIC_BREAK,
+	LEAF_ATX_HEADING,
+	LEAF_SET_TEXT_HEADING,
+	LEAF_INDENTED_CODE_BLOCK,
+	LEAF_FENCED_CODE_BLOCK,
+	LEAF_HTML_BLOCK,
+	LEAF_LINE_REFERECE,
+	LEAF_PARAGRAPH,
+	LEAF_BLANK_LINE,
+	LINE,
+	INLI_ESCAPE,
+	INLI_ENTITY,
+	INLI_CODE_SPAN,
+	INLI_EMPHASIZE,
+	INLI_STRONG_EMPHASIZE,
+	INLI_LINK,
+	INLI_IMAGE,
+	INLI_AUTOLINK,
+	INLI_RAW_HTML,
+	INLI_HARD_LINE_BREAK,
+	INLI_SOFT_LINE_BREAK,
+	INLI_TEXTUAL
+};
 
 struct parse_tree;
 
-void parse(struct buffer *buff, size_t len, struct parse_tree *pt);
-void render(struct parse_tree *pt, struct buffer *res);
+void parse(char *doc, size_t len, struct parse_tree *res);
+void render(struct parse_tree *pt, char *res);

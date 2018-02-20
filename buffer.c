@@ -44,6 +44,9 @@ size_t buffer_swap_bytail(struct buffer *buff, int i, size_t len){
 	return buff->size;
 }
 
+size_t buffer_pop(struct buffer *buff, size_t len){buff->size-=len; return buff->size;}
+char *buffer_top(struct buffer *buffer, size_t len){return buff->data + buffer->size - len; }
+
 void buffer_free(struct buffer *buff){
 	free(buff->data);
 	free(buff);
