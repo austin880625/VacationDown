@@ -20,7 +20,7 @@ size_t buffer_grow(struct buffer *buff){
 	size_t orig_cap = buff->cap;
 	buff->cap<<=1;
 	//printf("Next size: %lu\n", buff->cap);
-	buff->data = realloc(buff->data, buff->cap);
+	buff->data = (char*)realloc(buff->data, buff->cap);
 	return orig_cap;
 }
 
@@ -45,7 +45,7 @@ size_t buffer_swap_bytail(struct buffer *buff, int i, size_t len){
 }
 
 size_t buffer_pop(struct buffer *buff, size_t len){buff->size-=len; return buff->size;}
-char *buffer_top(struct buffer *buffer, size_t len){return buff->data + buffer->size - len; }
+char *buffer_top(struct buffer *buff, size_t len){return buff->data + buff->size - len; }
 
 void buffer_free(struct buffer *buff){
 	free(buff->data);
