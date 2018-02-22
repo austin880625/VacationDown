@@ -12,6 +12,8 @@
 #define MD_PAREN		0x0029
 #define MD_UNDERLINE		0x005F
 #define MD_NUMBER		0x0023
+#define MD_BACKTICK		0x0060
+#define MD_TILDE		0x007E
 
 #define MD_DIG_ZERO		0x0030
 #define MD_DIG_NINE		0x0039

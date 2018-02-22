@@ -3,24 +3,29 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <stdlib.h>
 
+#include "utf8.h"
 #include "markdown.h"
 
-char doc[131072];
-char filename[] = "doc2.md";
+char *doc;
+char *conv;
+char filename[] = "doc3.md";
 
 int main(){
 	FILE *fp = fopen(filename, "r");
 	size_t len=0;
-	char c;
-	while((c = getc(fp)) != EOF){
-		putchar(c);
-		doc[len++] = c;
-	}
+	fseek(fp, 0, SEEK_END);
+	len = (size_t)ftell(fp);
+	rewind(fp);
+	doc = (char*)malloc(len+1);
+	fread(doc, 1, len, fp);
+	conv = (char*)malloc(len*2);
+	size_t new_len = convfrom_utf8((unsigned char*) conv, (unsigned char*)doc, len);
 
 	struct parse_tree *res = parse_tree_create();
 	puts("Start parsing...");
-	parse(doc, len, res);
+	parse(conv, new_len, res);
 	puts("Below is parse tree");
 	print_parse_tree(res);
 

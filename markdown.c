@@ -13,6 +13,7 @@ struct parse_tree{
 	// attr: if nonzero on list_item means the number of whitespace
 	// indentation for matching
 	// if on list means the list type
+	// on atx heading means the heading level
 	uint16_t attr;
 	struct buffer *text;
 	struct parse_tree *next;
@@ -45,11 +46,15 @@ void print_parse_tree(struct parse_tree *o){ print_rec(o, 0); printf("\n\n"); }
 #else
 void print_parse_tree(struct parse_tree *o){ o=NULL; }
 #endif
-#ifdef REV
-static inline uint16_t get_ucs(char *doc, size_t pos){ return ((uint16_t)doc[pos]<<8)|((uint16_t)doc[pos+1]); }
-#else
 static inline uint16_t get_ucs(char *doc, size_t pos){ return ((uint16_t)doc[pos+1]<<8)|((uint16_t)doc[pos]); }
-#endif
+
+int three_space(char *doc, size_t line_beg){
+	int i=0;
+	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
+	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
+	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
+	return i;
+}
 // is_ prefix function are used for new open blocks
 // by matching prefixes
 //
@@ -67,25 +72,19 @@ int is_blankline(char *doc, size_t line_beg)
 }
 int is_blockquote(char *doc, size_t line_beg)
 {
-	int res = 0;
-	uint16_t c = get_ucs(doc, line_beg+res);
-	if(c == MD_SPACE){ res+=2; c = get_ucs(doc, line_beg+res); }
-	if(c == MD_SPACE){ res+=2; c = get_ucs(doc, line_beg+res); }
-	if(c == MD_SPACE){ res+=2; c = get_ucs(doc, line_beg+res); }
+	int i = three_space(doc, line_beg);
+	uint16_t c = get_ucs(doc, line_beg+i);
 	if(c == MD_GT){
-		res+=2;
-		c = get_ucs(doc, line_beg+res);
-		if(c == MD_SPACE) res+=2;
-		return res;
+		i+=2;
+		c = get_ucs(doc, line_beg+i);
+		if(c == MD_SPACE) i+=2;
+		return i;
 	}
 	return -1;
 }
 int is_thematic_break(char *doc, size_t line_beg)
 {
-	int i=0;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
+	int i = three_space(doc, line_beg);
 	uint16_t c = get_ucs(doc, line_beg+i); i+=2;
 	int cnt=1;
 	uint16_t cur = get_ucs(doc, line_beg+i);
@@ -113,51 +112,60 @@ int is_list_item(char *doc, size_t line_beg, uint16_t *list_type, struct parse_t
 	}
 	// matching a list marker
 	else{
-		int orig_beg = line_beg;
-		// unordered list marker
-		if(get_ucs(doc, line_beg) == MD_SPACE)line_beg+=2;
-		if(get_ucs(doc, line_beg) == MD_SPACE)line_beg+=2;
-		if(get_ucs(doc, line_beg) == MD_SPACE)line_beg+=2;
-		uint16_t c = get_ucs(doc, line_beg);
+		int i = three_space(doc, line_beg);
+		uint16_t c = get_ucs(doc, line_beg+i);
 		int w=0;
+		// unordered list marker
 		if(c == MD_ASTERISK || c == MD_PLUS || c == MD_MINUS){
 			if(c == MD_ASTERISK) *list_type = MD_LIST_TYPE_ASTERISK;
 			else if(c == MD_PLUS) *list_type = MD_LIST_TYPE_PLUS;
 			else if(c == MD_MINUS) *list_type = MD_LIST_TYPE_MINUS;
 		}
+		// ordered list marker
 		else if(MD_DIG_ZERO <= c && c <= MD_DIG_NINE){
-			while( MD_DIG_ZERO <= c && c <= MD_DIG_NINE){w+=2; c=get_ucs(doc, line_beg+w);}
+			while( MD_DIG_ZERO <= c && c <= MD_DIG_NINE){w+=2; c=get_ucs(doc, line_beg+i+w);}
 			if(c != MD_PAREN && c != MD_DOT) return -1;
 			if(c == MD_PAREN) *list_type = MD_LIST_TYPE_PAREN;
 			if(c == MD_DOT) *list_type = MD_LIST_TYPE_DOT;
-			if(w == 2 && get_ucs(doc, line_beg) == MD_DIG_ZERO+1) *list_type&=MD_LIST_TYPE_ONE;
+			if(w == 2 && get_ucs(doc, line_beg + i) == MD_DIG_ZERO+1) *list_type&=MD_LIST_TYPE_ONE;
 		}else
 			return -1;
 		w+=2;
 		int n;
-		for(n=0; n<=10; n+=2){if(get_ucs(doc, line_beg+w+n) != MD_SPACE)break;}
+		for(n=0; n<=10; n+=2){if(get_ucs(doc, line_beg+i+w+n) != MD_SPACE)break;}
 		if(n == 0){
 			// An empty list
-			if(is_blankline(doc, line_beg+w+n) != -1)
-				return line_beg-orig_beg+w+n;
+			if(is_blankline(doc, line_beg+i+w+n) != -1)
+				return line_beg+i+w+n;
 			return -1;
 		}
-		if(n == 12)return line_beg-orig_beg+w+2;
-		return line_beg-orig_beg+w+n;
+		if(n == 12)return line_beg+i+w+2;
+		return line_beg+i+w+n;
 	}
 }
 int is_atx_heading(char *doc, size_t line_beg, struct parse_tree *cur_child)
 {
-	int i=0;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
-	if(get_ucs(doc, line_beg+i) == MD_SPACE)i+=2;
-	uint16_t c = get_ucs(doc, line_beg);
+	int i = three_space(doc, line_beg);
+	uint16_t c = get_ucs(doc, line_beg+i);
 	int level = 0;
 	while(c == MD_NUMBER){ level++; i+=2; c = get_ucs(doc, line_beg+i);}
 	if(c != MD_SPACE || level>6){ return -1; }
 	if(cur_child)cur_child->attr = level;
 	return i+2;
+}
+
+int is_fenced_code_block(char *doc, size_t line_beg, struct parse_tree *cur_child)
+{
+	int i = three_space(doc, line_beg);
+	uint16_t c = get_ucs(doc, line_beg+i);
+	if(c != MD_BACKTICK && c != MD_TILDE){return -1;} i+=2;
+	if(get_ucs(doc, line_beg+i) != c){ return -1; } i+=2;
+	if(get_ucs(doc, line_beg+i) != c){ return -1; } i+=2;
+	if(cur_child){
+		if( c == MD_BACKTICK ) cur_child->attr = MD_BACKTICK;
+		else cur_child->attr = MD_TILDE;
+	}
+	return i;
 }
 
 int match_marker(char *doc, size_t line_beg, struct buffer *stack, struct parse_tree **matched)
@@ -174,13 +182,21 @@ int match_marker(char *doc, size_t line_beg, struct buffer *stack, struct parse_
 		if(anc->t == CONT_LIST_ITEM){
 			int prefix = is_list_item(doc, line_beg+res, NULL, anc);
 			if(prefix != -1)res+=prefix;
-			else { *matched = *(struct parse_tree**)(buffer_ptr(stack)+i-2*szptp); return res; }
+			else { *matched = *(struct parse_tree**)(buffer_ptr(stack)+i-szptp); return res; }
 		}
 		if(anc->t == LEAF_PARAGRAPH){
 			// Never match paragraph since we need to check for a new opening
 			assert(anc == *(struct parse_tree **)(buffer_top(stack,szptp)));
 			*matched = *(struct parse_tree**)(buffer_ptr(stack)+i-szptp);
 			return res;
+		}
+		if(anc->t == LEAF_FENCED_CODE_BLOCK){
+			// Fenced code block consists only if it is contained by the while doc
+			// (It can be closed by the closing of other container while there's no closing fence)
+			if((*(struct parse_tree**)(buffer_ptr(stack)+i-szptp))->t != DOC){
+				*matched = *(struct parse_tree**)(buffer_ptr(stack)+i-szptp);
+				return res;
+			}
 		}
 	}
 	*matched = *(struct parse_tree **)buffer_top(stack, szptp);
@@ -190,10 +206,12 @@ int match_marker(char *doc, size_t line_beg, struct buffer *stack, struct parse_
 // keep_open: determine whether the line keep the cur_open block open
 // If so, return the offset of the line to parse the containing block
 // otherwise return -1
-int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct buffer *stack, struct parse_tree **matched)
+// Variable skipping is used to skip characters when return value is -1
+int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct buffer *stack, struct parse_tree **matched, size_t *skipping)
 {
 	// The DOC node is always open til reaching the end
 	// of the document
+	*skipping = 0;
 	if(cur_open->t == DOC){ *matched = cur_open; return 0; }
 	// Some node can be closed immediately since they're consist of only one line
 	if(cur_open->t == LEAF_BLANK_LINE ||
@@ -202,6 +220,12 @@ int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct bu
 	   ) return -1;
 	int res = match_marker(doc, line_beg, stack, matched);
 	if(cur_open->t == CONT_LIST && (is_list_item(doc, line_beg, NULL, cur_open)==-1) )return -1;
+	if(cur_open->t == LEAF_FENCED_CODE_BLOCK){
+		int orig_fence = cur_open->attr;
+		*skipping = is_fenced_code_block(doc, line_beg, cur_open);
+		if(*skipping != -1 && cur_open->attr == orig_fence) return -1;
+		else { *skipping = 0; cur_open->attr = orig_fence; }
+	}
 	if(*matched == cur_open){ return res; }
 	else if(cur_open->t != LEAF_PARAGRAPH){ return -1; }
 	// There're still unmatched open blocks, but need to
@@ -213,12 +237,6 @@ int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct bu
 int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct parse_tree *cur_child)
 {
 	int res = 0;
-	res = is_blockquote(doc, line_beg);
-	if(res != -1){ if(cur_child) cur_child->t = CONT_BLOCKQUOTE; return res;}
-	res = is_thematic_break(doc, line_beg);
-	if(res != -1){ if(cur_child) cur_child->t = LEAF_THEMATIC_BREAK;  return res; }
-	res = is_atx_heading(doc, line_beg, cur_child);
-	if(res != -1){ if(cur_child) cur_child->t = LEAF_ATX_HEADING; return res; }
 	uint16_t list_type;
 	res = is_list_item(doc, line_beg, &list_type, cur_open);
 	if(res != -1){
@@ -244,9 +262,16 @@ int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct par
 			return 0;
 		}
 	}
-	if(cur_open->t == LEAF_FENCED_CODE_BLOCK ||
-	   cur_open->t == LEAF_INDENTED_CODE_BLOCK ||
-	   cur_open->t == LEAF_HTML_BLOCK ||
+	if(cur_open->t == LEAF_FENCED_CODE_BLOCK)return -1;
+	res = is_fenced_code_block(doc, line_beg, cur_child);
+	if(res != -1){ if(cur_child) cur_child->t = LEAF_FENCED_CODE_BLOCK; return res;}
+	res = is_blockquote(doc, line_beg);
+	if(res != -1){ if(cur_child) cur_child->t = CONT_BLOCKQUOTE; return res;}
+	res = is_thematic_break(doc, line_beg);
+	if(res != -1){ if(cur_child) cur_child->t = LEAF_THEMATIC_BREAK;  return res; }
+	res = is_atx_heading(doc, line_beg, cur_child);
+	if(res != -1){ if(cur_child) cur_child->t = LEAF_ATX_HEADING; return res; }
+	if(cur_open->t == LEAF_HTML_BLOCK ||
 	   cur_open->t == LEAF_ATX_HEADING ||
 	   cur_open->t == LEAF_THEMATIC_BREAK
 	  )return -1;
@@ -297,14 +322,16 @@ void parse(char *doc, size_t len, struct parse_tree *res)
 		// Determine whether the line closes the current open blocks
 		struct parse_tree *cur_open = *(struct parse_tree **)buffer_top(stack, szptp);
 		struct parse_tree *matched;
-		int ko = keep_open(doc, line_beg, cur_open, stack, &matched);
+		size_t skipping;
+		int ko = keep_open(doc, line_beg, cur_open, stack, &matched, &skipping);
 		while(ko == -1){
 			cur_child = cur_open;
 			cur_child->next = (struct parse_tree*) malloc(szpt);
 			cur_child = cur_child->next; parse_tree_init(cur_child);
 			buffer_pop(stack, szptp);
 			cur_open = *(struct parse_tree **)buffer_top(stack, szptp);
-			ko = keep_open(doc, line_beg, cur_open, stack, &matched);
+			line_beg += skipping;
+			ko = keep_open(doc, line_beg, cur_open, stack, &matched, &skipping);
 		}
 		line_beg += (size_t)ko;
 		// Determine whether the line opens a new block.
