@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "utf8.h"
 #define DEBUG
 #ifdef DEBUG
 	#include <stdio.h>
@@ -28,11 +29,11 @@ void parse_tree_init(struct parse_tree *o){
 }
 
 #ifdef DEBUG
-static char *enum_strings[] = {"DOC","CONT_BLOCKQUOTE","CONT_LIST_ITEM","CONT_LIST","LEAF_THEMATIC_BREAK","LEAF_ATX_HEADING",
+static const char *enum_strings[] = {"DOC","CONT_BLOCKQUOTE","CONT_LIST_ITEM","CONT_LIST","CONT_LIST","LEAF_THEMATIC_BREAK","LEAF_ATX_HEADING","LEAF_ATX_HEADING","LEAF_ATX_HEADING","LEAF_ATX_HEADING","LEAF_ATX_HEADING","LEAF_ATX_HEADING",
 	"LEAF_SET_TEXT_HEADING","LEAF_INDENTED_CODE_BLOCK","LEAF_FENCED_CODE_BLOCK","LEAF_HTML_BLOCK","LEAF_LINE_REFERECE",
 	"LEAF_PARAGRAPH","LEAF_BLANK_LINE","INLI_ESCAPE","INLI_ENTITY","INLI_CODE_SPAN","INLI_EMPHASIZE","INLI_STRONG_EMPHASIZE",
 	"INLI_LINK","INLI_IMAGE","INLI_AUTOLINK","INLI_RAW_HTML","INLI_HARD_LINE_BREAK","INLI_SOFT_LINE_BREAK","INLI_TEXTUAL",
-	"UNDET" };
+	"CONT_LIST","LEAF_ATX_HEADING","UNDET" };
 void print_rec(struct parse_tree *o, int dep)
 {
 	for(int i=0; i<dep-1; i++){printf("| ");}
@@ -46,7 +47,7 @@ void print_parse_tree(struct parse_tree *o){ print_rec(o, 0); printf("\n\n"); }
 #else
 void print_parse_tree(struct parse_tree *o){ o=NULL; }
 #endif
-static inline uint16_t get_ucs(char *doc, size_t pos){ return ((uint16_t)doc[pos+1]<<8)|((uint16_t)doc[pos]); }
+static inline uint16_t get_ucs(char *doc, size_t pos){ return ((uint16_t)doc[pos+1]<<8)|(((uint16_t)doc[pos])&0x00ff); }
 
 int three_space(char *doc, size_t line_beg){
 	int i=0;
@@ -127,7 +128,7 @@ int is_list_item(char *doc, size_t line_beg, uint16_t *list_type, struct parse_t
 			if(c != MD_PAREN && c != MD_DOT) return -1;
 			if(c == MD_PAREN) *list_type = MD_LIST_TYPE_PAREN;
 			if(c == MD_DOT) *list_type = MD_LIST_TYPE_DOT;
-			if(w == 2 && get_ucs(doc, line_beg + i) == MD_DIG_ZERO+1) *list_type&=MD_LIST_TYPE_ONE;
+			if(w == 2 && get_ucs(doc, line_beg + i) == MD_DIG_ZERO+1) *list_type|=MD_LIST_TYPE_ONE;
 		}else
 			return -1;
 		w+=2;
@@ -136,11 +137,11 @@ int is_list_item(char *doc, size_t line_beg, uint16_t *list_type, struct parse_t
 		if(n == 0){
 			// An empty list
 			if(is_blankline(doc, line_beg+i+w+n) != -1)
-				return line_beg+i+w+n;
+				return i+w+n;
 			return -1;
 		}
-		if(n == 12)return line_beg+i+w+2;
-		return line_beg+i+w+n;
+		if(n == 12)return i+w+2;
+		return i+w+n;
 	}
 }
 int is_atx_heading(char *doc, size_t line_beg, struct parse_tree *cur_child)
@@ -153,7 +154,6 @@ int is_atx_heading(char *doc, size_t line_beg, struct parse_tree *cur_child)
 	if(cur_child)cur_child->attr = level;
 	return i+2;
 }
-
 int is_fenced_code_block(char *doc, size_t line_beg, struct parse_tree *cur_child)
 {
 	int i = three_space(doc, line_beg);
@@ -190,14 +190,17 @@ int match_marker(char *doc, size_t line_beg, struct buffer *stack, struct parse_
 			*matched = *(struct parse_tree**)(buffer_ptr(stack)+i-szptp);
 			return res;
 		}
+		/*
 		if(anc->t == LEAF_FENCED_CODE_BLOCK){
-			// Fenced code block consists only if it is contained by the while doc
+			// Fenced code block consists only if it is contained by the whole doc
 			// (It can be closed by the closing of other container while there's no closing fence)
-			if((*(struct parse_tree**)(buffer_ptr(stack)+i-szptp))->t != DOC){
+			enum node_type parent_type = (*(struct parse_tree**)(buffer_ptr(stack)+i-szptp))->t;
+			if(parent_type == CONT_LIST_ITEM){
 				*matched = *(struct parse_tree**)(buffer_ptr(stack)+i-szptp);
 				return res;
 			}
 		}
+		*/
 	}
 	*matched = *(struct parse_tree **)buffer_top(stack, szptp);
 	return res;
@@ -207,11 +210,11 @@ int match_marker(char *doc, size_t line_beg, struct buffer *stack, struct parse_
 // If so, return the offset of the line to parse the containing block
 // otherwise return -1
 // Variable skipping is used to skip characters when return value is -1
-int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct buffer *stack, struct parse_tree **matched, size_t *skipping)
+int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct buffer *stack, struct parse_tree **matched, int *skipping)
 {
+	*skipping = 0;
 	// The DOC node is always open til reaching the end
 	// of the document
-	*skipping = 0;
 	if(cur_open->t == DOC){ *matched = cur_open; return 0; }
 	// Some node can be closed immediately since they're consist of only one line
 	if(cur_open->t == LEAF_BLANK_LINE ||
@@ -234,7 +237,7 @@ int keep_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct bu
 	else return res;
 }
 
-int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct parse_tree *cur_child)
+int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct parse_tree *cur_child, struct parse_tree *matched)
 {
 	int res = 0;
 	uint16_t list_type;
@@ -244,10 +247,11 @@ int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct par
 		if(cur_open->t == LEAF_PARAGRAPH && (is_blankline(doc, line_beg+res) != -1)){return -1;}
 		if(cur_open->t == LEAF_PARAGRAPH && !(list_type&MD_LIST_TYPE_ONE)){
 			if(list_type != MD_LIST_TYPE_PLUS && list_type !=MD_LIST_TYPE_MINUS && list_type != MD_LIST_TYPE_ASTERISK)
-				return -1;
+				if(matched->t == DOC || matched->t == CONT_LIST_ITEM)
+					return -1;
 		}
 		// Check if it a new list
-		if(cur_open->t == CONT_LIST && cur_open->attr == list_type){
+		if(cur_open->t == CONT_LIST && cur_open->attr == (list_type&0x0FFF)){
 			if(cur_child){
 				cur_child->t = CONT_LIST_ITEM;
 				cur_child->attr = (uint16_t)res;
@@ -257,7 +261,7 @@ int new_open(char *doc, size_t line_beg, struct parse_tree *cur_open, struct par
 		else{
 			if(cur_child){
 				cur_child->t = CONT_LIST;
-				cur_child->attr = list_type;
+				cur_child->attr = list_type&0x0FFF;
 			}
 			return 0;
 		}
@@ -297,8 +301,8 @@ size_t add_line(char *doc, size_t line_beg, size_t len, struct parse_tree *cur_o
 	if(get_ucs(doc, end) == MD_CARRIAGE_RETURN && get_ucs(doc, end+2) == MD_NEWLINE)end+=2;
 	if(!cur_open->text)cur_open->text = buffer_create();
 	
-	buffer_append(cur_open->text, doc+line_beg, (size_t)((int)end-(int)line_beg+2));
-	return (size_t)((int)end-(int)line_beg+2);
+	buffer_append(cur_open->text, doc+line_beg, end-line_beg+2);
+	return end-line_beg+2;
 }
 
 struct parse_tree *parse_tree_create(){
@@ -322,7 +326,7 @@ void parse(char *doc, size_t len, struct parse_tree *res)
 		// Determine whether the line closes the current open blocks
 		struct parse_tree *cur_open = *(struct parse_tree **)buffer_top(stack, szptp);
 		struct parse_tree *matched;
-		size_t skipping;
+		int skipping;
 		int ko = keep_open(doc, line_beg, cur_open, stack, &matched, &skipping);
 		while(ko == -1){
 			cur_child = cur_open;
@@ -330,14 +334,14 @@ void parse(char *doc, size_t len, struct parse_tree *res)
 			cur_child = cur_child->next; parse_tree_init(cur_child);
 			buffer_pop(stack, szptp);
 			cur_open = *(struct parse_tree **)buffer_top(stack, szptp);
-			line_beg += skipping;
+			line_beg += (size_t)skipping;
 			ko = keep_open(doc, line_beg, cur_open, stack, &matched, &skipping);
 		}
 		line_beg += (size_t)ko;
 		// Determine whether the line opens a new block.
 		// If it doesn't and current open block is a leaf block, it always
 		// returns -1 and leave cur_child empty
-		ko = new_open(doc, line_beg, cur_open, NULL);
+		ko = new_open(doc, line_beg, cur_open, NULL, matched);
 		// Close all unmatched blocks before opening a new block
 		if(ko != -1){
 			while(cur_open != matched){
@@ -350,23 +354,69 @@ void parse(char *doc, size_t len, struct parse_tree *res)
 		}
 		// Do it again to obtain info of cur_child since it might been
 		// overwritten when popping the stack
-		ko = new_open(doc, line_beg, cur_open, cur_child);
+		ko = new_open(doc, line_beg, cur_open, cur_child, matched);
 		while(ko != -1){
 			buffer_append(stack, &cur_child, szptp);
 			cur_open = cur_child;
 			cur_open->children = (struct parse_tree *)malloc(szpt);
 			cur_child = cur_open->children; parse_tree_init(cur_child);
 			line_beg += (size_t)ko;
-			ko = new_open(doc, line_beg, cur_open, cur_child);
+			ko = new_open(doc, line_beg, cur_open, cur_child, matched);
 		}
 		// At here, we reached the deepest open block and
 		// cur_child is empty, the remain of the line is the
 		// text to be added to the cur_open block(which is a leaf)
 		line_beg += add_line(doc, line_beg, len, cur_open);
-		printf("%lu\n", line_beg);
-		print_parse_tree(res);
+		//printf("%lu\n", line_beg);
+		//print_parse_tree(res);
 	}
 
 	// Phase 2: parse the inline elements, we break the text field 
 	// into children of the leaf block with type INLI_XX in field t
+}
+
+static const char *open_tagname[] = { "", "<blockquote>\n", "<li>\n", "<ol>\n", "<ul>\n", "<hr />\n", "<h1>\n", "<h2>\n", "<h3>\n", "<h4>\n", "<h5>\n", "<h6>\n", "<h>\n", "", "<pre><code>\n",
+				 	"", "", "<p>\n", "", "", "", ""};
+static const char *close_tagname[] = { "", "</blockquote>\n", "</li>\n", "</ol>\n", "</ul>\n", "", "</h1>\n", "</h2>\n", "</h3>\n", "</h4>\n", "</h5>\n", "</h6>\n", "</h>\n", "", "</code></pre>\n",
+				 	"", "", "</p>\n", "", "", "", ""};
+void render_rec(struct parse_tree *pt, struct buffer *buff)
+{
+	if(pt->t == UNDET)return ;
+	enum node_type tagtype = pt->t;
+	if(tagtype == LEAF_ATX_HEADING)tagtype = (enum node_type)((int)ATX_H1+pt->attr-1);
+	if(tagtype == CONT_LIST){
+		if(pt->attr == MD_LIST_TYPE_DOT || pt->attr == MD_LIST_TYPE_PAREN)tagtype = CONT_LIST_OL;
+		else tagtype = CONT_LIST_UL;
+	}
+	size_t taglen = strlen(open_tagname[tagtype]);
+	buffer_append(buff, (void*)open_tagname[tagtype], taglen);
+	if(pt->children->t == UNDET && pt->text){
+		size_t text_len = buffer_size(pt->text);
+		for(size_t i=0; i<text_len; i+=2){
+			uint16_t c = get_ucs(buffer_ptr(pt->text), i);
+			unsigned char tmp[4] = {0,0,0,0};
+			size_t utf_codelen = getutf8ch(tmp, c);
+			buffer_append(buff, tmp, utf_codelen);
+		}
+		taglen = strlen(close_tagname[tagtype]);
+		buffer_append(buff, (void*)close_tagname[tagtype], taglen);
+		return ;
+	}
+	for(struct parse_tree *cur = pt->children; cur&&cur->t != UNDET; cur = cur->next){
+		render_rec(cur, buff);
+	}
+	taglen = strlen(close_tagname[tagtype]);
+	buffer_append(buff, (void*)close_tagname[tagtype], taglen);
+}
+// render: render directly to in utf-8 encoding
+size_t render(struct parse_tree *pt, char **res)
+{
+	struct buffer *res_buf = buffer_create();
+	render_rec(pt, res_buf);
+	size_t len = buffer_size(res_buf);
+	*res = (char*) malloc(len+1);
+	memcpy(*res, buffer_ptr(res_buf), len);
+	buffer_free(res_buf);
+
+	return len;
 }

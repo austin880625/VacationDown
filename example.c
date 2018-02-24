@@ -10,7 +10,7 @@
 
 char *doc;
 char *conv;
-char filename[] = "doc3.md";
+char filename[] = "README.md";
 
 int main(){
 	FILE *fp = fopen(filename, "r");
@@ -24,10 +24,14 @@ int main(){
 	size_t new_len = convfrom_utf8((unsigned char*) conv, (unsigned char*)doc, len);
 
 	struct parse_tree *res = parse_tree_create();
-	puts("Start parsing...");
+	//puts("Start parsing...");
 	parse(conv, new_len, res);
-	puts("Below is parse tree");
-	print_parse_tree(res);
+	//puts("Below is parse tree");
+	//print_parse_tree(res);
+	//puts("Rendering...");
+	char *res_html;
+	len = render(res, &res_html);
+	for(size_t i=0; i<len; i++)putchar(res_html[i]);
 
 	fclose(fp);
 	return 0;

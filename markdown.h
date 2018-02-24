@@ -8,7 +8,7 @@
 #define MD_ASTERISK		0x002A
 #define MD_PLUS			0x002B
 #define MD_MINUS		0x002D
-#define MD_DOT			0x002B
+#define MD_DOT			0x002E
 #define MD_PAREN		0x0029
 #define MD_UNDERLINE		0x005F
 #define MD_NUMBER		0x0023
@@ -35,9 +35,11 @@ enum node_type {
 	DOC,
 	CONT_BLOCKQUOTE,
 	CONT_LIST_ITEM,
-	CONT_LIST,
+	// CONT_LIST_OL and CONT_LIST_UL is used when rendering
+	CONT_LIST_OL,
+	CONT_LIST_UL,
 	LEAF_THEMATIC_BREAK,
-	LEAF_ATX_HEADING,
+	ATX_H1, ATX_H2, ATX_H3, ATX_H4, ATX_H5, ATX_H6,
 	LEAF_SET_TEXT_HEADING,
 	LEAF_INDENTED_CODE_BLOCK,
 	LEAF_FENCED_CODE_BLOCK,
@@ -57,6 +59,8 @@ enum node_type {
 	INLI_HARD_LINE_BREAK,
 	INLI_SOFT_LINE_BREAK,
 	INLI_TEXTUAL,
+	CONT_LIST,
+	LEAF_ATX_HEADING,
 	UNDET
 };
 
@@ -64,4 +68,4 @@ struct parse_tree;
 void print_parse_tree(struct parse_tree *o);
 struct parse_tree *parse_tree_create();
 void parse(char *doc, size_t len, struct parse_tree *res);
-void render(struct parse_tree *pt, char *res);
+size_t render(struct parse_tree *pt, char **res);

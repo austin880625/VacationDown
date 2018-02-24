@@ -1,4 +1,4 @@
-
+#include <stdlib.h>
 struct buffer;
 // buffer_create: create a buffer object and return its pointer
 struct buffer *buffer_create();
