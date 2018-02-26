@@ -1,4 +1,7 @@
 #include <stdlib.h>
+#ifndef __BUFFER_FILE
+#define __BUFFER_FILE
+
 struct buffer;
 // buffer_create: create a buffer object and return its pointer
 struct buffer *buffer_create();
@@ -17,3 +20,5 @@ size_t buffer_pop(struct buffer *buff, size_t len);
 char *buffer_top(struct buffer *buff, size_t len);
 // buffer_free: free the buffer object and its data
 void buffer_free(struct buffer *buff);
+
+#endif

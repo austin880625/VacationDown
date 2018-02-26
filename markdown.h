@@ -1,3 +1,6 @@
+#ifndef __MD_FILE
+#define __MD_FILE
+
 #define MD_NEWLINE		0x000A
 #define MD_CARRIAGE_RETURN	0x000D
 #define MD_SPACE		0x0020
@@ -69,3 +72,5 @@ void print_parse_tree(struct parse_tree *o);
 struct parse_tree *parse_tree_create();
 void parse(char *doc, size_t len, struct parse_tree *res);
 size_t render(struct parse_tree *pt, char **res);
+
+#endif
