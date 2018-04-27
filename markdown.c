@@ -375,7 +375,7 @@ void parse(char *doc, size_t len, struct parse_tree *res)
 	// into children of the leaf block with type INLI_XX in field t
 }
 
-static const char *open_tagname[] = { "", "<blockquote>\n", "<li>\n", "<ol>\n", "<ul>\n", "<hr />\n", "<h1>\n", "<h2>\n", "<h3>\n", "<h4>\n", "<h5>\n", "<h6>\n", "<h>\n", "", "<pre><code>\n",
+static const char *open_tagname[] = { "", "<blockquote>\n", "<li>\n", "<ol>\n", "<ul>\n", "<hr />\n", "<h1>\n", "<h2>\n", "<h3>\n", "<h4>\n", "<h5>\n", "<h6>\n", "<h>\n", "", "<pre><code>",
 				 	"", "", "<p>\n", "", "", "", ""};
 static const char *close_tagname[] = { "", "</blockquote>\n", "</li>\n", "</ol>\n", "</ul>\n", "", "</h1>\n", "</h2>\n", "</h3>\n", "</h4>\n", "</h5>\n", "</h6>\n", "</h>\n", "", "</code></pre>\n",
 				 	"", "", "</p>\n", "", "", "", ""};
